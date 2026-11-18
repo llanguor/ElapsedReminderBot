@@ -1,7 +1,7 @@
 from datetime import datetime
-import emoji
 from zoneinfo import ZoneInfo
 from dateutil.relativedelta import relativedelta
+from emoji import emoji_list
 from settings import settings
 
 timezone = ZoneInfo(settings["timezone"])
@@ -111,10 +111,6 @@ def describe_in_unit(event_date, unit):
     return with_direction(event_date, format_in_unit(event_date, unit))
 
 
-def abbreviated_text(number, unit):
-    return f"{number}{settings['abbreviations'][unit]}"
-
-
 def elapsed_values(start, end, units):
     start, end = min(start, end), max(start, end)
     anchor = start
@@ -134,49 +130,83 @@ def elapsed_values(start, end, units):
     return values
 
 
-def render_units(values, units, style):
-    render = abbreviated_text if style == "short" else count_text
-    texts = [render(values[unit], unit) for unit in units if values[unit] or unit in TIME_UNITS]
-    if not texts:
-        texts = [render(0, units[-1])]
-    return settings["short_separator"].join(texts) if style == "short" else join_texts(texts)
+# The emoji the event title starts with ("" if it does not start with one).
+def leading_emoji(title):
+    found = emoji_list(title)
+    return found[0]["emoji"] if found and found[0]["match_start"] == 0 else ""
 
 
-def parse_mask(mask):
+# The emoji tag exists only in widgets (widget=True); in reminders it stays plain text.
+def parse_template(text, widget=False):
+    tags = settings["tags"]
+    suffix = settings["word_suffix"]
+    terminator = settings["tag_terminator"]
     tokens = []
     index = 0
-    while index < len(mask):
-        char = mask[index]
-        if char == "\\" and index + 1 < len(mask):
-            tokens.append(("text", mask[index + 1]))
+    while index < len(text):
+        char = text[index]
+        following = text[index + 1] if index + 1 < len(text) else ""
+        if char == "\\" and following == "\\":
+            tokens.append(("text", "\\"))
             index += 2
-        elif char in settings["mask_tokens"]:
+        elif widget and char == "\\" and following == settings["emoji_tag"]:
+            swallow = text.startswith(" ", index + 2)
+            tokens.append(("emoji", swallow))
+            index += 3 if swallow else 2
+        elif char == "\\" and following in tags:
+            unit = tags[following]
             width = 1
-            while index + width < len(mask) and mask[index + width] == char:
+            while text.startswith(following, index + 1 + width):
                 width += 1
-            tokens.append(("unit", settings["mask_tokens"][char], width))
-            index += width
+            end = index + 1 + width
+            if text.startswith(terminator, end):
+                tokens.append(("value", unit, width))
+                index = end + len(terminator)
+            elif text.startswith(suffix, end):
+                tokens.append(("word", unit))
+                index = end + len(suffix)
+            else:
+                tokens.append(("value", unit, width))
+                index = end
         else:
             tokens.append(("text", char))
             index += 1
     return tokens
 
 
+def template_units(tokens):
+    return {token[1] for token in tokens if token[0] in ("value", "word")}
+
+
+# The emoji tag takes the space after it along when there is no emoji, so the text never starts with a space.
+def render_template(tokens, values, emoji=""):
+    parts = []
+    for token in tokens:
+        if token[0] == "text":
+            parts.append(token[1])
+        elif token[0] == "emoji":
+            parts.append(emoji + " " if emoji and token[1] else emoji)
+        elif token[0] == "value":
+            parts.append(str(values[token[1]]).zfill(token[2]))
+        else:
+            parts.append(plural(values[token[1]], settings["plural_forms"][token[1]]))
+    return "".join(parts)
+
+
 def is_valid_mask(mask):
-    return any(token[0] == "unit" for token in parse_mask(mask))
+    return bool(template_units(parse_template(mask, widget=True)))
 
 
-def format_widget(event, widget_format, mask=None):
+# Pass the event when rendering a widget: only then the emoji tag works.
+def render_between(text, start, end, event=None):
+    tokens = parse_template(text, widget=event is not None)
+    emoji = leading_emoji(event["title"]) if event is not None else ""
+    return render_template(tokens, elapsed_values(start, end, template_units(tokens)), emoji)
+
+
+def format_widget(event, mask):
     start = datetime.fromisoformat(event["date"])
     end = now()
     if not has_time(event["date"]):
         end = end.replace(hour=0, minute=0, second=0, microsecond=0)
-    if widget_format == "custom":
-        tokens = parse_mask(mask)
-        values = elapsed_values(start, end, {token[1] for token in tokens if token[0] == "unit"})
-        text = "".join(token[1] if token[0] == "text" else str(values[token[1]]).zfill(token[2]) for token in tokens)
-    else:
-        preset = settings["widget_formats"][widget_format]
-        text = render_units(elapsed_values(start, end, preset["units"]), preset["units"], preset["style"])
-    emojis = emoji.emoji_list(event["title"])
-    return f"{emojis[0]['emoji']} {text}" if emojis else text
+    return render_between(mask, start, end, event)

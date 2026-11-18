@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 from settings import settings
-from elapsed_formatter import elapsed_values, has_time, parse_event_date, plural
+from elapsed_formatter import has_time, parse_event_date, plural, render_between
 
 REFERENCE_PATTERN = re.compile(r"\s*\[([^\[\]\n]*)\]\s*$")
 
@@ -21,23 +21,7 @@ def render_reminder(text, current):
     text, reference = split_reference(text)
     if reference is None:
         return text
-    tags = settings["reminder_tags"]
-    result = []
-    index = 0
-    while index < len(text):
-        char = text[index]
-        following = text[index + 1] if index + 1 < len(text) else ""
-        if char == "\\" and following == "\\":
-            result.append("\\")
-            index += 2
-        elif char == "\\" and following in tags:
-            unit = tags[following]
-            result.append(str(elapsed_values(reference, current, {unit})[unit]))
-            index += 2
-        else:
-            result.append(char)
-            index += 1
-    return "".join(result)
+    return render_between(text, reference, current)
 
 
 def parse_reminder_time(text):

@@ -5,22 +5,22 @@ from settings import settings
 EVENTS_FILE = settings["events_file"]
 
 
-def add_event(user_id, title, event_date):
+def add_event(scope, title, event_date):
     event = {"id": uuid.uuid4().hex[:8], "title": title, "date": event_date}
-    update_data(EVENTS_FILE, lambda data: data.setdefault(str(user_id), []).append(event))
+    update_data(EVENTS_FILE, lambda data: data.setdefault(str(scope), []).append(event))
 
 
-def get_events(user_id):
-    return load_data(EVENTS_FILE).get(str(user_id), [])
+def get_events(scope):
+    return load_data(EVENTS_FILE).get(str(scope), [])
 
 
-def get_event(user_id, event_id):
-    return next((event for event in get_events(user_id) if event["id"] == event_id), None)
+def get_event(scope, event_id):
+    return next((event for event in get_events(scope) if event["id"] == event_id), None)
 
 
-def delete_event(user_id, event_id):
+def delete_event(scope, event_id):
     def updater(data):
-        events = data.get(str(user_id), [])
+        events = data.get(str(scope), [])
         for event in events:
             if event["id"] == event_id:
                 events.remove(event)

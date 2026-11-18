@@ -16,27 +16,27 @@ def next_occurrence(start, repeat, every, after):
     return occurrence
 
 
-def add_reminder(user_id, text, start, repeat, every, chat_id, thread_id):
+def add_reminder(scope, text, start, repeat, every, chat_id, thread_id):
     moment = start.isoformat(timespec="minutes")
     reminder = {"id": uuid.uuid4().hex[:8], "text": text, "start": moment, "next": moment, "repeat": repeat, "every": every, "chat_id": chat_id, "thread_id": thread_id}
-    update_data(REMINDERS_FILE, lambda data: data.setdefault(str(user_id), []).append(reminder))
+    update_data(REMINDERS_FILE, lambda data: data.setdefault(str(scope), []).append(reminder))
 
 
-def get_reminders(user_id):
-    return load_data(REMINDERS_FILE).get(str(user_id), [])
+def get_reminders(scope):
+    return load_data(REMINDERS_FILE).get(str(scope), [])
 
 
-def get_reminder(user_id, reminder_id):
-    return next((reminder for reminder in get_reminders(user_id) if reminder["id"] == reminder_id), None)
+def get_reminder(scope, reminder_id):
+    return next((reminder for reminder in get_reminders(scope) if reminder["id"] == reminder_id), None)
 
 
 def get_all_reminders():
-    return [(user_id, reminder) for user_id, reminders in load_data(REMINDERS_FILE).items() for reminder in reminders]
+    return [(scope, reminder) for scope, reminders in load_data(REMINDERS_FILE).items() for reminder in reminders]
 
 
-def delete_reminder(user_id, reminder_id):
+def delete_reminder(scope, reminder_id):
     def updater(data):
-        reminders = data.get(str(user_id), [])
+        reminders = data.get(str(scope), [])
         for reminder in reminders:
             if reminder["id"] == reminder_id:
                 reminders.remove(reminder)
@@ -46,9 +46,9 @@ def delete_reminder(user_id, reminder_id):
     return update_data(REMINDERS_FILE, updater)
 
 
-def complete_reminder(user_id, reminder_id, after):
+def complete_reminder(scope, reminder_id, after):
     def updater(data):
-        reminders = data.get(str(user_id), [])
+        reminders = data.get(str(scope), [])
         for reminder in reminders:
             if reminder["id"] != reminder_id:
                 continue
